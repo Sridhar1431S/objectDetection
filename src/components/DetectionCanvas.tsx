@@ -1,7 +1,7 @@
 import { RefObject } from "react";
 import { motion } from "framer-motion";
 import { ImageIcon, Scan } from "lucide-react";
-import type { Detection } from "@/pages/Index";
+import type { Detection } from "@/types/detection";
 
 interface DetectionCanvasProps {
   image: string | null;

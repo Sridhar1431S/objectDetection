@@ -1,6 +1,6 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { Crosshair, Loader2 } from "lucide-react";
-import type { Detection } from "@/pages/Index";
+import type { Detection } from "@/types/detection";
 
 interface DetectionListProps {
   detections: Detection[];
