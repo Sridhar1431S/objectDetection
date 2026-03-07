@@ -3,11 +3,12 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Upload, Camera, CameraOff, Zap, Target, Box, Eye } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/hooks/use-toast";
 import DetectionCanvas from "@/components/DetectionCanvas";
 import DetectionList from "@/components/DetectionList";
 import StatusBar from "@/components/StatusBar";
 import type { Detection } from "@/types/detection";
-import { MOCK_DETECTIONS } from "@/types/detection";
 
 const DetectionPage = () => {
   const [searchParams] = useSearchParams();
@@ -15,8 +16,47 @@ const DetectionPage = () => {
   const [isWebcamActive, setIsWebcamActive] = useState(false);
   const [detections, setDetections] = useState<Detection[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [imageSize, setImageSize] = useState<{ width: number; height: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+
+  const detectImage = useCallback(async (imageDataUrl: string) => {
+    setIsProcessing(true);
+    setDetections([]);
+
+    // Get natural image dimensions
+    const img = new Image();
+    img.onload = () => {
+      setImageSize({ width: img.naturalWidth, height: img.naturalHeight });
+    };
+    img.src = imageDataUrl;
+
+    try {
+      const { data, error } = await supabase.functions.invoke('detect-image', {
+        body: { image: imageDataUrl },
+      });
+
+      if (error) throw error;
+      if (data?.detections) {
+        setDetections(data.detections);
+        toast({
+          title: "Detection Complete",
+          description: `Found ${data.detections.length} object(s)`,
+        });
+      } else if (data?.error) {
+        throw new Error(data.error);
+      }
+    } catch (err: any) {
+      console.error("Detection failed:", err);
+      toast({
+        title: "Detection Failed",
+        description: err.message || "Could not process the image. Try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  }, []);
 
   // Check for image from landing page or webcam param
   useEffect(() => {
@@ -24,11 +64,7 @@ const DetectionPage = () => {
     if (storedImage) {
       sessionStorage.removeItem("detection-image");
       setUploadedImage(storedImage);
-      setIsProcessing(true);
-      setTimeout(() => {
-        setDetections(MOCK_DETECTIONS);
-        setIsProcessing(false);
-      }, 1500);
+      detectImage(storedImage);
     }
 
     if (searchParams.get("webcam") === "true") {
@@ -46,16 +82,26 @@ const DetectionPage = () => {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = (ev) => {
-      setUploadedImage(ev.target?.result as string);
+      const dataUrl = ev.target?.result as string;
+      setUploadedImage(dataUrl);
       setIsWebcamActive(false);
-      setIsProcessing(true);
-      setTimeout(() => {
-        setDetections(MOCK_DETECTIONS);
-        setIsProcessing(false);
-      }, 1500);
+      detectImage(dataUrl);
     };
     reader.readAsDataURL(file);
-  }, []);
+  }, [detectImage]);
+
+  const captureWebcamFrame = useCallback(() => {
+    if (!videoRef.current) return;
+    const canvas = document.createElement("canvas");
+    canvas.width = videoRef.current.videoWidth;
+    canvas.height = videoRef.current.videoHeight;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.drawImage(videoRef.current, 0, 0);
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
+    setUploadedImage(dataUrl);
+    detectImage(dataUrl);
+  }, [detectImage]);
 
   const toggleWebcam = useCallback(async () => {
     if (isWebcamActive) {
@@ -73,11 +119,13 @@ const DetectionPage = () => {
       }
       setUploadedImage(null);
       setIsWebcamActive(true);
-      setTimeout(() => {
-        setDetections(MOCK_DETECTIONS.slice(0, 3));
-      }, 1000);
     } catch {
       console.error("Webcam access denied");
+      toast({
+        title: "Webcam Error",
+        description: "Could not access your camera. Please grant permission.",
+        variant: "destructive",
+      });
     }
   }, [isWebcamActive]);
 
@@ -112,6 +160,16 @@ const DetectionPage = () => {
               {isWebcamActive ? <CameraOff className="h-4 w-4" /> : <Camera className="h-4 w-4" />}
               {isWebcamActive ? "Stop Webcam" : "Start Webcam"}
             </Button>
+            {isWebcamActive && (
+              <Button
+                onClick={captureWebcamFrame}
+                className="gap-2 font-mono text-sm"
+                disabled={isProcessing}
+              >
+                <Target className="h-4 w-4" />
+                Capture & Detect
+              </Button>
+            )}
           </div>
           <StatusBar isWebcamActive={isWebcamActive} detectionCount={detections.length} isProcessing={isProcessing} />
         </motion.div>
@@ -119,7 +177,7 @@ const DetectionPage = () => {
         {/* Main Content Grid */}
         <div className="grid gap-6 lg:grid-cols-3">
           <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.1 }} className="lg:col-span-2">
-            <DetectionCanvas image={uploadedImage} isWebcamActive={isWebcamActive} videoRef={videoRef} detections={detections} isProcessing={isProcessing} />
+            <DetectionCanvas image={uploadedImage} isWebcamActive={isWebcamActive} videoRef={videoRef} detections={detections} isProcessing={isProcessing} imageSize={imageSize} />
           </motion.div>
           <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2 }}>
             <DetectionList detections={detections} isProcessing={isProcessing} />
@@ -134,7 +192,7 @@ const DetectionPage = () => {
                 { icon: Target, label: "Objects Detected", value: detections.length },
                 { icon: Zap, label: "Avg Confidence", value: `${(detections.reduce((a, d) => a + d.confidence, 0) / detections.length * 100).toFixed(1)}%` },
                 { icon: Box, label: "Unique Classes", value: new Set(detections.map((d) => d.name)).size },
-                { icon: Eye, label: "Model", value: "YOLOv8" },
+                { icon: Eye, label: "Model", value: "DETR" },
               ].map((stat, i) => (
                 <div key={i} className="rounded-lg border border-border bg-card p-4 glow-border">
                   <div className="mb-2 flex items-center gap-2 text-muted-foreground">
