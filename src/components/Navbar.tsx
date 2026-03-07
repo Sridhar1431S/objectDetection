@@ -5,6 +5,7 @@ const navLinks = [
   { label: "Home", path: "/" },
   { label: "Detection", path: "/detection" },
   { label: "History", path: "/history" },
+  { label: "Stats", path: "/stats" },
   { label: "About", path: "/about" },
 ];
 
@@ -21,7 +22,7 @@ const Navbar = () => {
           <span className="font-mono text-lg font-bold text-foreground">AI Detect</span>
         </Link>
 
-        <nav className="flex items-center gap-8">
+        <nav className="flex items-center gap-6">
           {navLinks.map((link) => {
             const isActive = location.pathname === link.path;
             return (
