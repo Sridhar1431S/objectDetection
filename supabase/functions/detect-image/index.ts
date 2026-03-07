@@ -67,7 +67,7 @@ Example output:
           }
         ],
         temperature: 0.1,
-        max_tokens: 4096,
+        max_tokens: 8192,
       }),
     });
 
@@ -87,8 +87,24 @@ Example output:
     // Parse the JSON from the response (strip markdown code fences if present)
     let parsed;
     try {
-      const cleaned = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-      parsed = JSON.parse(cleaned);
+      let cleaned = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      // If JSON is truncated, try to salvage complete objects
+      try {
+        parsed = JSON.parse(cleaned);
+      } catch {
+        // Find the last complete object by finding last "}," or "}" before end
+        const lastComplete = cleaned.lastIndexOf('}');
+        if (lastComplete > 0) {
+          let truncated = cleaned.substring(0, lastComplete + 1);
+          // Ensure array is closed
+          if (!truncated.endsWith(']')) {
+            truncated = truncated + ']';
+          }
+          parsed = JSON.parse(truncated);
+        } else {
+          throw new Error('No complete objects found');
+        }
+      }
     } catch (e) {
       console.error('Failed to parse AI response:', e.message, content.substring(0, 300));
       return new Response(JSON.stringify({ error: 'Could not parse detection results', raw: content.substring(0, 200) }), {
