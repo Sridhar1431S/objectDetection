@@ -20,9 +20,14 @@ const DetectionPage = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
 
-  const detectImage = useCallback(async (imageDataUrl: string) => {
+  const detectImage = useCallback(async (imageDataUrl: string, retries = 0) => {
+    if (!imageDataUrl || !imageDataUrl.startsWith('data:image')) {
+      toast({ title: "Invalid Image", description: "Please upload a valid image file.", variant: "destructive" });
+      return;
+    }
+
     setIsProcessing(true);
-    setDetections([]);
+    if (retries === 0) setDetections([]);
 
     // Get natural image dimensions
     const img = new Image();
@@ -37,22 +42,23 @@ const DetectionPage = () => {
       });
 
       if (error) throw error;
+
+      // Model may be loading on HuggingFace (cold start)
+      if (data?.loading && retries < 3) {
+        toast({ title: "Model Loading", description: "AI model is warming up, retrying in a few seconds..." });
+        await new Promise(r => setTimeout(r, 5000));
+        return detectImage(imageDataUrl, retries + 1);
+      }
+
       if (data?.detections) {
         setDetections(data.detections);
-        toast({
-          title: "Detection Complete",
-          description: `Found ${data.detections.length} object(s)`,
-        });
+        toast({ title: "Detection Complete", description: `Found ${data.detections.length} object(s)` });
       } else if (data?.error) {
         throw new Error(data.error);
       }
     } catch (err: any) {
       console.error("Detection failed:", err);
-      toast({
-        title: "Detection Failed",
-        description: err.message || "Could not process the image. Try again.",
-        variant: "destructive",
-      });
+      toast({ title: "Detection Failed", description: err.message || "Could not process the image. Try again.", variant: "destructive" });
     } finally {
       setIsProcessing(false);
     }
