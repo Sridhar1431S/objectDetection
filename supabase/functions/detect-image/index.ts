@@ -1,5 +1,4 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { decode as base64Decode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -13,7 +12,7 @@ serve(async (req) => {
 
   try {
     const { image } = await req.json();
-    
+
     if (!image || typeof image !== 'string' || !image.startsWith('data:image')) {
       return new Response(JSON.stringify({ error: 'No valid image data URL provided' }), {
         status: 400,
@@ -21,60 +20,79 @@ serve(async (req) => {
       });
     }
 
-    // Extract base64 data after the comma in data URL
-    const commaIndex = image.indexOf(',');
-    if (commaIndex === -1) {
-      return new Response(JSON.stringify({ error: 'Invalid data URL format' }), {
-        status: 400,
+    const apiKey = Deno.env.get('LOVABLE_API_KEY');
+    if (!apiKey) {
+      return new Response(JSON.stringify({ error: 'AI API key not configured' }), {
+        status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    const base64Data = image.substring(commaIndex + 1);
-    if (!base64Data || base64Data.length < 100) {
-      return new Response(JSON.stringify({ error: 'Image data is empty or too small' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
+    // Use Lovable AI Gateway with Gemini vision for object detection
+    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-flash',
+        messages: [
+          {
+            role: 'system',
+            content: `You are an object detection model. Given an image, identify all visible objects and estimate their bounding box coordinates in pixels relative to the image dimensions.
 
-    // Use Deno's std base64 decoder
-    const binaryData = base64Decode(base64Data);
+Return ONLY a valid JSON array (no markdown, no explanation). Each element must have:
+- "label": string (object class name, lowercase)
+- "score": number between 0 and 1 (your confidence)
+- "box": { "xmin": number, "ymin": number, "xmax": number, "ymax": number }
 
-    // Call Hugging Face Inference Router (api-inference.huggingface.co is deprecated)
-    const response = await fetch(
-      'https://router.huggingface.co/hf-inference/models/facebook/detr-resnet-101',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/octet-stream',
-          'Accept': 'application/json',
-        },
-        body: binaryData,
-      }
-    );
+Coordinates should be pixel values assuming the image's natural resolution. Be thorough - detect all distinct objects including people, animals, vehicles, furniture, food, electronics, etc. Only include objects with confidence >= 0.3.
+
+Example output:
+[{"label":"cat","score":0.95,"box":{"xmin":50,"ymin":100,"xmax":300,"ymax":400}},{"label":"chair","score":0.7,"box":{"xmin":400,"ymin":200,"xmax":600,"ymax":500}}]`
+          },
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'image_url',
+                image_url: { url: image }
+              },
+              {
+                type: 'text',
+                text: 'Detect all objects in this image. Return only the JSON array.'
+              }
+            ]
+          }
+        ],
+        temperature: 0.1,
+        max_tokens: 4096,
+      }),
+    });
 
     if (!response.ok) {
-      const contentType = response.headers.get('content-type') || '';
-      const rawError = await response.text();
-      const details = contentType.includes('application/json')
-        ? rawError
-        : `Upstream returned HTTP ${response.status}`;
-
-      console.error('HuggingFace API error:', response.status, rawError.slice(0, 500));
-      return new Response(JSON.stringify({ error: 'Detection API failed', details }), {
+      const errorText = await response.text();
+      console.error('Lovable AI error:', response.status, errorText);
+      return new Response(JSON.stringify({ error: 'Detection API failed', details: `AI returned HTTP ${response.status}` }), {
         status: 502,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    const results = await response.json();
-    console.log('HuggingFace results:', JSON.stringify(results).substring(0, 500));
+    const result = await response.json();
+    const content = result.choices?.[0]?.message?.content || '';
+    console.log('AI raw response:', content.substring(0, 500));
 
-    // Handle model loading state
-    if (results?.error) {
-      return new Response(JSON.stringify({ error: results.error, loading: !!results.estimated_time }), {
-        status: 503,
+    // Parse the JSON from the response (strip markdown code fences if present)
+    let parsed;
+    try {
+      const cleaned = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      parsed = JSON.parse(cleaned);
+    } catch (e) {
+      console.error('Failed to parse AI response:', e.message, content.substring(0, 300));
+      return new Response(JSON.stringify({ error: 'Could not parse detection results', raw: content.substring(0, 200) }), {
+        status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -86,7 +104,7 @@ serve(async (req) => {
       "hsl(300, 100%, 50%)",
     ];
 
-    const detections = Array.isArray(results) ? results.map((r: any, i: number) => ({
+    const detections = Array.isArray(parsed) ? parsed.map((r: any, i: number) => ({
       id: i + 1,
       name: r.label,
       confidence: r.score,
