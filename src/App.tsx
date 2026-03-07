@@ -7,6 +7,7 @@ import Navbar from "@/components/Navbar";
 import Index from "./pages/Index";
 import Detection from "./pages/Detection";
 import History from "./pages/History";
+import Stats from "./pages/Stats";
 import About from "./pages/About";
 import NotFound from "./pages/NotFound";
 
@@ -23,6 +24,7 @@ const App = () => (
           <Route path="/" element={<Index />} />
           <Route path="/detection" element={<Detection />} />
           <Route path="/history" element={<History />} />
+          <Route path="/stats" element={<Stats />} />
           <Route path="/about" element={<About />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
