@@ -9,6 +9,7 @@ interface DetectionCanvasProps {
   videoRef: RefObject<HTMLVideoElement>;
   detections: Detection[];
   isProcessing: boolean;
+  imageSize?: { width: number; height: number } | null;
 }
 
 const DetectionCanvas = ({
@@ -17,6 +18,7 @@ const DetectionCanvas = ({
   videoRef,
   detections,
   isProcessing,
+  imageSize,
 }: DetectionCanvasProps) => {
   const showPlaceholder = !image && !isWebcamActive;
 
@@ -50,7 +52,7 @@ const DetectionCanvas = ({
           />
         )}
 
-        {isWebcamActive && (
+        {isWebcamActive && !image && (
           <video
             ref={videoRef}
             className="h-full w-full object-contain"
@@ -60,19 +62,19 @@ const DetectionCanvas = ({
           />
         )}
 
-        {/* Bounding boxes overlay */}
-        {detections.map((det) => (
+        {/* Bounding boxes overlay - uses pixel coords from API relative to natural image size */}
+        {image && imageSize && detections.map((det) => (
           <motion.div
             key={det.id}
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: det.id * 0.1 }}
+            transition={{ delay: det.id * 0.05 }}
             className="absolute border-2"
             style={{
-              left: `${(det.x / 700) * 100}%`,
-              top: `${(det.y / 400) * 100}%`,
-              width: `${(det.width / 700) * 100}%`,
-              height: `${(det.height / 400) * 100}%`,
+              left: `${(det.x / imageSize.width) * 100}%`,
+              top: `${(det.y / imageSize.height) * 100}%`,
+              width: `${(det.width / imageSize.width) * 100}%`,
+              height: `${(det.height / imageSize.height) * 100}%`,
               borderColor: det.color,
               boxShadow: `0 0 8px ${det.color}40`,
             }}
@@ -94,7 +96,7 @@ const DetectionCanvas = ({
           <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/50 backdrop-blur-sm">
             <div className="flex items-center gap-3 rounded-lg border border-primary/30 bg-card px-6 py-3 glow-border">
               <Scan className="h-5 w-5 animate-spin text-primary" />
-              <span className="font-mono text-sm text-primary">Analyzing...</span>
+              <span className="font-mono text-sm text-primary">Analyzing with AI...</span>
             </div>
           </div>
         )}
