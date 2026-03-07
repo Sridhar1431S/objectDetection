@@ -41,20 +41,28 @@ serve(async (req) => {
     // Use Deno's std base64 decoder
     const binaryData = base64Decode(base64Data);
 
-    // Call Hugging Face free Inference API (DETR object detection)
+    // Call Hugging Face Inference Router (api-inference.huggingface.co is deprecated)
     const response = await fetch(
-      'https://api-inference.huggingface.co/models/facebook/detr-resnet-101',
+      'https://router.huggingface.co/hf-inference/models/facebook/detr-resnet-101',
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/octet-stream' },
+        headers: {
+          'Content-Type': 'application/octet-stream',
+          'Accept': 'application/json',
+        },
         body: binaryData,
       }
     );
 
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error('HuggingFace API error:', response.status, errorText);
-      return new Response(JSON.stringify({ error: 'Detection API failed', details: errorText }), {
+      const contentType = response.headers.get('content-type') || '';
+      const rawError = await response.text();
+      const details = contentType.includes('application/json')
+        ? rawError
+        : `Upstream returned HTTP ${response.status}`;
+
+      console.error('HuggingFace API error:', response.status, rawError.slice(0, 500));
+      return new Response(JSON.stringify({ error: 'Detection API failed', details }), {
         status: 502,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
