@@ -43,7 +43,7 @@ serve(async (req) => {
 
     // Call Hugging Face free Inference API (DETR object detection)
     const response = await fetch(
-      'https://api-inference.huggingface.co/models/facebook/detr-resnet-50',
+      'https://api-inference.huggingface.co/models/facebook/detr-resnet-101',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/octet-stream' },
