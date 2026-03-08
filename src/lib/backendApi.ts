@@ -73,7 +73,7 @@ export async function detectFrame(
 }
 
 export async function stopDetection(): Promise<{ success: boolean }> {
-  return api("/api/realtime/stop", { method: "POST" });
+  return api("/api/realtime/stop", { method: "POST", body: JSON.stringify({}) });
 }
 
 export interface StatusResponse {
