@@ -1,13 +1,13 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Play, Square, Cpu, Gauge, Clock, Box, Video } from "lucide-react";
+import { Play, Square, Cpu, Gauge, Clock, Box } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useRealtimeDetection } from "@/hooks/useRealtimeDetection";
 import { getStreamUrl } from "@/lib/backendApi";
 
 const RealtimePanel = () => {
   const rt = useRealtimeDetection();
-  const [useStream, setUseStream] = useState(false);
+  const [useStream, setUseStream] = useState(true);
 
   return (
     <div className="space-y-6">
@@ -16,7 +16,7 @@ const RealtimePanel = () => {
         {!rt.isRunning ? (
           <Button onClick={() => rt.start()} className="gap-2 font-mono text-sm">
             <Play className="h-4 w-4" />
-            Start Real-time Detection
+            Start Detection
           </Button>
         ) : (
           <Button
@@ -44,8 +44,7 @@ const RealtimePanel = () => {
               size="sm"
               className="gap-2 font-mono text-xs"
             >
-              <Video className="h-3.5 w-3.5" />
-              {useStream ? "Switch to Frames" : "Switch to MJPEG Stream"}
+              {useStream ? "Switch to Frame Polling" : "Switch to MJPEG Stream"}
             </Button>
           </>
         )}
@@ -75,19 +74,19 @@ const RealtimePanel = () => {
         </motion.div>
       )}
 
-      {/* Annotated frame / MJPEG stream */}
+      {/* Video preview — MJPEG stream from backend or polled frames */}
       <div className="relative overflow-hidden rounded-lg border border-border bg-card glow-border">
         <div className="relative aspect-video w-full">
           {rt.isRunning && useStream ? (
             <img
               src={getStreamUrl()}
-              alt="Live MJPEG stream"
+              alt="Live MJPEG stream from backend"
               className="h-full w-full object-contain"
             />
-          ) : rt.annotatedFrame ? (
+          ) : rt.isRunning && rt.annotatedFrame ? (
             <img
               src={rt.annotatedFrame}
-              alt="Real-time detection"
+              alt="Real-time detection frame"
               className="h-full w-full object-contain"
             />
           ) : (
