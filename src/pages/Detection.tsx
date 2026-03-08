@@ -142,33 +142,43 @@ const DetectionPage = () => {
 
   const startBackendDetection = async () => {
 
-    try {
+  try {
 
-      await fetch(`${BACKEND_URL}/api/realtime/start`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({})
-      });
+    const res = await fetch(`${BACKEND_URL}/api/realtime/start`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({})
+    });
 
-      setUploadedImage(null);
-      setIsWebcamActive(true);
+    const data = await res.json();
 
-      toast({
-        title: "Detection Started",
-        description: "Backend webcam detection started"
-      });
-
-    } catch {
-
-      toast({
-        title: "Webcam Error",
-        description: "Could not start backend webcam",
-        variant: "destructive"
-      });
-
+    if (!res.ok || !data.success) {
+      throw new Error(data.message || "Backend failed to start webcam");
     }
 
-  };
+    setUploadedImage(null);
+    setIsWebcamActive(true);
+
+    toast({
+      title: "Detection Started",
+      description: "Backend webcam detection started successfully"
+    });
+
+  } catch (err) {
+
+    console.error("Backend start error:", err);
+
+    toast({
+      title: "Webcam Error",
+      description: "Could not start backend webcam",
+      variant: "destructive"
+    });
+
+  }
+
+};
 
   const stopBackendDetection = async () => {
 
