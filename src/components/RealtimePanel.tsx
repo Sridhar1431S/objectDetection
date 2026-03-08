@@ -1,10 +1,13 @@
+import { useState } from "react";
 import { motion } from "framer-motion";
-import { Play, Square, Cpu, Gauge, Clock, Box } from "lucide-react";
+import { Play, Square, Cpu, Gauge, Clock, Box, Video } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useRealtimeDetection } from "@/hooks/useRealtimeDetection";
+import { getStreamUrl } from "@/lib/backendApi";
 
 const RealtimePanel = () => {
   const rt = useRealtimeDetection();
+  const [useStream, setUseStream] = useState(false);
 
   return (
     <div className="space-y-6">
@@ -27,13 +30,24 @@ const RealtimePanel = () => {
         )}
 
         {rt.isRunning && (
-          <div className="flex items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5">
-            <span className="relative flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75" />
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
-            </span>
-            <span className="font-mono text-xs text-primary">LIVE</span>
-          </div>
+          <>
+            <div className="flex items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
+              </span>
+              <span className="font-mono text-xs text-primary">LIVE</span>
+            </div>
+            <Button
+              onClick={() => setUseStream((v) => !v)}
+              variant="outline"
+              size="sm"
+              className="gap-2 font-mono text-xs"
+            >
+              <Video className="h-3.5 w-3.5" />
+              {useStream ? "Switch to Frames" : "Switch to MJPEG Stream"}
+            </Button>
+          </>
         )}
       </div>
 
@@ -61,10 +75,16 @@ const RealtimePanel = () => {
         </motion.div>
       )}
 
-      {/* Annotated frame */}
+      {/* Annotated frame / MJPEG stream */}
       <div className="relative overflow-hidden rounded-lg border border-border bg-card glow-border">
         <div className="relative aspect-video w-full">
-          {rt.annotatedFrame ? (
+          {rt.isRunning && useStream ? (
+            <img
+              src={getStreamUrl()}
+              alt="Live MJPEG stream"
+              className="h-full w-full object-contain"
+            />
+          ) : rt.annotatedFrame ? (
             <img
               src={rt.annotatedFrame}
               alt="Real-time detection"
@@ -81,7 +101,7 @@ const RealtimePanel = () => {
         </div>
       </div>
 
-      {/* Live detections sidebar-style list */}
+      {/* Live detections list */}
       {rt.detections.length > 0 && (
         <div className="rounded-lg border border-border bg-card p-4 glow-border">
           <h3 className="mb-3 font-mono text-xs font-semibold uppercase text-muted-foreground">
