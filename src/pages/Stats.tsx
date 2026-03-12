@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import { BarChart3, RefreshCw, AlertCircle, Cpu, Target, Clock, Activity } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -13,13 +13,16 @@ import {
 } from "recharts";
 import { getStats, type StatsResponse } from "@/lib/backendApi";
 
+const POLL_INTERVAL = 5000; // 5 seconds
+
 const Stats = () => {
   const [stats, setStats] = useState<StatsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const intervalRef = useRef<number | null>(null);
 
-  const load = async () => {
-    setLoading(true);
+  const load = async (silent = false) => {
+    if (!silent) setLoading(true);
     setError(null);
     try {
       const res = await getStats();
@@ -31,7 +34,13 @@ const Stats = () => {
     }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    intervalRef.current = window.setInterval(() => load(true), POLL_INTERVAL);
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, []);
 
   const chartData = stats
     ? Object.entries(stats.class_distribution).map(([name, count]) => ({ name, count }))
@@ -51,13 +60,22 @@ const Stats = () => {
             </div>
             <div>
               <h1 className="font-mono text-2xl font-bold text-foreground">Statistics</h1>
-              <p className="text-sm text-muted-foreground">Detection analytics from the database</p>
+              <p className="text-sm text-muted-foreground">Live detection analytics</p>
             </div>
           </div>
-          <Button onClick={load} variant="outline" size="sm" className="gap-2 font-mono text-xs">
-            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
-            Refresh
-          </Button>
+          <div className="flex items-center gap-2">
+            <span className="flex items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 px-2 py-1">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
+              </span>
+              <span className="font-mono text-[10px] text-primary">AUTO-REFRESH</span>
+            </span>
+            <Button onClick={() => load()} variant="outline" size="sm" className="gap-2 font-mono text-xs">
+              <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+              Refresh
+            </Button>
+          </div>
         </motion.div>
 
         {error && (
@@ -101,24 +119,25 @@ const Stats = () => {
                 </h3>
                 <ResponsiveContainer width="100%" height={300}>
                   <BarChart data={chartData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(220 15% 20%)" />
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                     <XAxis
                       dataKey="name"
-                      tick={{ fill: "hsl(220 10% 50%)", fontSize: 11, fontFamily: "monospace" }}
+                      tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11, fontFamily: "monospace" }}
                     />
                     <YAxis
-                      tick={{ fill: "hsl(220 10% 50%)", fontSize: 11, fontFamily: "monospace" }}
+                      tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11, fontFamily: "monospace" }}
                     />
                     <Tooltip
                       contentStyle={{
-                        backgroundColor: "hsl(220 18% 10%)",
-                        border: "1px solid hsl(150 30% 18%)",
+                        backgroundColor: "hsl(var(--card))",
+                        border: "1px solid hsl(var(--border))",
                         borderRadius: 8,
                         fontFamily: "monospace",
                         fontSize: 12,
+                        color: "hsl(var(--foreground))",
                       }}
                     />
-                    <Bar dataKey="count" fill="hsl(150, 100%, 45%)" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="count" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
