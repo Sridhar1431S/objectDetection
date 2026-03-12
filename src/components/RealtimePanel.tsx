@@ -203,11 +203,7 @@ const RealtimePanel = () => {
               >
 
                 <div
-                  className="h-2.5 w-2.5 rounded-full"
-                  style={{
-                    backgroundColor: d.color,
-                    boxShadow: `0 0 6px ${d.color}`
-                  }}
+                  className="h-2.5 w-2.5 rounded-full bg-primary"
                 />
 
                 <span className="font-mono text-sm font-semibold text-foreground">
