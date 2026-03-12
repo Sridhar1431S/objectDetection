@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import { Clock, RefreshCw, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -12,13 +12,16 @@ import {
 } from "@/components/ui/table";
 import { getRecentDetections, type HistoryDetection } from "@/lib/backendApi";
 
+const POLL_INTERVAL = 3000; // 3 seconds
+
 const History = () => {
   const [rows, setRows] = useState<HistoryDetection[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const intervalRef = useRef<number | null>(null);
 
-  const load = async () => {
-    setLoading(true);
+  const load = async (silent = false) => {
+    if (!silent) setLoading(true);
     setError(null);
     try {
       const res = await getRecentDetections(100);
@@ -30,7 +33,13 @@ const History = () => {
     }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    intervalRef.current = window.setInterval(() => load(true), POLL_INTERVAL);
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, []);
 
   return (
     <div className="min-h-[calc(100vh-73px)]">
@@ -47,14 +56,23 @@ const History = () => {
             <div>
               <h1 className="font-mono text-2xl font-bold text-foreground">Detection History</h1>
               <p className="text-sm text-muted-foreground">
-                Past detections stored in the SQL database
+                Live-updating detection log from the database
               </p>
             </div>
           </div>
-          <Button onClick={load} variant="outline" size="sm" className="gap-2 font-mono text-xs">
-            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
-            Refresh
-          </Button>
+          <div className="flex items-center gap-2">
+            <span className="flex items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 px-2 py-1">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
+              </span>
+              <span className="font-mono text-[10px] text-primary">AUTO-REFRESH</span>
+            </span>
+            <Button onClick={() => load()} variant="outline" size="sm" className="gap-2 font-mono text-xs">
+              <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+              Refresh
+            </Button>
+          </div>
         </motion.div>
 
         {error && (
