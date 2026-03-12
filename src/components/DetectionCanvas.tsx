@@ -1,4 +1,3 @@
-import { RefObject } from "react";
 import { motion } from "framer-motion";
 import { ImageIcon, Scan } from "lucide-react";
 import type { Detection } from "@/types/detection";
@@ -6,7 +5,6 @@ import type { Detection } from "@/types/detection";
 interface DetectionCanvasProps {
   image: string | null;
   isWebcamActive: boolean;
-  videoRef: RefObject<HTMLVideoElement>;
   detections: Detection[];
   isProcessing: boolean;
   imageSize?: { width: number; height: number } | null;
@@ -15,93 +13,66 @@ interface DetectionCanvasProps {
 const DetectionCanvas = ({
   image,
   isWebcamActive,
-  videoRef,
   detections,
   isProcessing,
   imageSize,
 }: DetectionCanvasProps) => {
-  const showPlaceholder = !image && !isWebcamActive;
+
+  const containerW = 800;
+  const containerH = 500;
+
+  const scaleX = imageSize ? containerW / imageSize.width : 1;
+  const scaleY = imageSize ? containerH / imageSize.height : 1;
 
   return (
-    <div className="relative overflow-hidden rounded-lg border border-border bg-card glow-border">
-      {/* Scan line effect */}
-      {isProcessing && (
-        <div className="pointer-events-none absolute inset-0 z-20 scan-line" />
-      )}
-
-      <div className="relative aspect-video w-full">
-        {showPlaceholder && (
-          <div className="flex h-full flex-col items-center justify-center gap-4 text-muted-foreground">
-            <div className="rounded-full bg-secondary p-6">
-              <ImageIcon className="h-10 w-10" />
-            </div>
-            <div className="text-center">
-              <p className="font-mono text-sm font-medium">No Input Source</p>
-              <p className="mt-1 font-mono text-xs text-muted-foreground">
-                Upload an image or start webcam detection
-              </p>
-            </div>
-          </div>
-        )}
-
-        {image && (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.98 }}
+      animate={{ opacity: 1, scale: 1 }}
+      className="relative overflow-hidden rounded-xl border border-border bg-card glow-border"
+      style={{ width: containerW, maxWidth: "100%", height: containerH }}
+    >
+      {image ? (
+        <>
           <img
             src={image}
-            alt="Uploaded for detection"
+            alt="Detection target"
             className="h-full w-full object-contain"
           />
-        )}
 
-        {isWebcamActive && !image && (
-          <video
-            ref={videoRef}
-            className="h-full w-full object-contain"
-            autoPlay
-            playsInline
-            muted
-          />
-        )}
-
-        {/* Bounding boxes overlay - uses pixel coords from API relative to natural image size */}
-        {image && imageSize && detections.map((det) => (
-          <motion.div
-            key={det.id}
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: det.id * 0.05 }}
-            className="absolute border-2"
-            style={{
-              left: `${(det.x / imageSize.width) * 100}%`,
-              top: `${(det.y / imageSize.height) * 100}%`,
-              width: `${(det.width / imageSize.width) * 100}%`,
-              height: `${(det.height / imageSize.height) * 100}%`,
-              borderColor: det.color,
-              boxShadow: `0 0 8px ${det.color}40`,
-            }}
-          >
-            <span
-              className="absolute -top-5 left-0 whitespace-nowrap rounded-sm px-1.5 py-0.5 font-mono text-[10px] font-bold"
+          {detections.map((d) => (
+            <div
+              key={d.id}
+              className="absolute border-2 rounded"
               style={{
-                backgroundColor: det.color,
-                color: "hsl(220, 20%, 6%)",
+                left: d.x * scaleX,
+                top: d.y * scaleY,
+                width: d.width * scaleX,
+                height: d.height * scaleY,
+                borderColor: d.color,
               }}
             >
-              {det.name} {(det.confidence * 100).toFixed(0)}%
-            </span>
-          </motion.div>
-        ))}
-
-        {/* Processing indicator */}
-        {isProcessing && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/50 backdrop-blur-sm">
-            <div className="flex items-center gap-3 rounded-lg border border-primary/30 bg-card px-6 py-3 glow-border">
-              <Scan className="h-5 w-5 animate-spin text-primary" />
-              <span className="font-mono text-sm text-primary">Analyzing with AI...</span>
+              <span
+                className="absolute -top-5 left-0 rounded px-1 text-[10px] font-mono font-bold text-background"
+                style={{ backgroundColor: d.color }}
+              >
+                {d.name} {(d.confidence * 100).toFixed(0)}%
+              </span>
             </div>
-          </div>
-        )}
-      </div>
-    </div>
+          ))}
+
+          {isProcessing && (
+            <div className="absolute inset-0 flex items-center justify-center bg-background/60 backdrop-blur-sm">
+              <Scan className="h-10 w-10 animate-pulse text-primary" />
+            </div>
+          )}
+        </>
+      ) : (
+        <div className="flex h-full w-full flex-col items-center justify-center gap-3 text-muted-foreground">
+          <ImageIcon className="h-12 w-12" />
+          <p className="font-mono text-sm">Upload an image to detect objects</p>
+        </div>
+      )}
+    </motion.div>
   );
 };
 

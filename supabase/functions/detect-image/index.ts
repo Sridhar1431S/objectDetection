@@ -28,7 +28,6 @@ serve(async (req) => {
       });
     }
 
-    // Use Lovable AI Gateway with Gemini vision for object detection
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -48,6 +47,8 @@ Return ONLY a valid JSON array (no markdown, no explanation). Each element must 
 - "box": { "xmin": number, "ymin": number, "xmax": number, "ymax": number }
 
 Coordinates should be pixel values assuming the image's natural resolution. Be thorough - detect all distinct objects including people, animals, vehicles, furniture, food, electronics, etc. Only include objects with confidence >= 0.3.
+
+IMPORTANT: Return valid JSON only. Do not duplicate keys. Each object must have exactly one "label", one "score", and one "box".
 
 Example output:
 [{"label":"cat","score":0.95,"box":{"xmin":50,"ymin":100,"xmax":300,"ymax":400}},{"label":"chair","score":0.7,"box":{"xmin":400,"ymin":200,"xmax":600,"ymax":500}}]`
@@ -84,19 +85,33 @@ Example output:
     const content = result.choices?.[0]?.message?.content || '';
     console.log('AI raw response:', content.substring(0, 500));
 
-    // Parse the JSON from the response (strip markdown code fences if present)
+    // Parse the JSON from the response
     let parsed;
     try {
+      // Strip markdown code fences
       let cleaned = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-      // If JSON is truncated, try to salvage complete objects
+
+      // Fix malformed duplicate key patterns like "label": "label": "value" → "label": "value"
+      cleaned = cleaned.replace(/"(\w+)":\s*"(\w+)":\s*/g, (_match: string, key1: string, key2: string) => {
+        // If key1 === key2 it's a duplicate key bug from the model
+        if (key1 === key2) return `"${key1}": `;
+        // Otherwise it might be a real value followed by a colon (also malformed), try to keep second
+        return `"${key1}": `;
+      });
+
+      // Remove any trailing commas before ] or }
+      cleaned = cleaned.replace(/,\s*([}\]])/g, '$1');
+
+      // Fix stray numbers not in key-value context (e.g. "ymin": 218, 490,)
+      cleaned = cleaned.replace(/:\s*(\d+)\s*,\s*(\d+)\s*,/g, ': $1,');
+
       try {
         parsed = JSON.parse(cleaned);
       } catch {
-        // Find the last complete object by finding last "}," or "}" before end
-        const lastComplete = cleaned.lastIndexOf('}');
-        if (lastComplete > 0) {
-          let truncated = cleaned.substring(0, lastComplete + 1);
-          // Ensure array is closed
+        // Try to salvage complete objects
+        const lastBrace = cleaned.lastIndexOf('}');
+        if (lastBrace > 0) {
+          let truncated = cleaned.substring(0, lastBrace + 1);
           if (!truncated.endsWith(']')) {
             truncated = truncated + ']';
           }
@@ -105,8 +120,9 @@ Example output:
           throw new Error('No complete objects found');
         }
       }
-    } catch (e) {
-      console.error('Failed to parse AI response:', e.message, content.substring(0, 300));
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error('Failed to parse AI response:', msg, content.substring(0, 300));
       return new Response(JSON.stringify({ error: 'Could not parse detection results', raw: content.substring(0, 200) }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -120,23 +136,29 @@ Example output:
       "hsl(300, 100%, 50%)",
     ];
 
-    const detections = Array.isArray(parsed) ? parsed.map((r: any, i: number) => ({
-      id: i + 1,
-      name: r.label,
-      confidence: r.score,
-      x: r.box.xmin,
-      y: r.box.ymin,
-      width: r.box.xmax - r.box.xmin,
-      height: r.box.ymax - r.box.ymin,
-      color: colors[i % colors.length],
-    })) : [];
+    const detections = Array.isArray(parsed) ? parsed
+      .filter((r: Record<string, unknown>) => r.label && r.score && r.box)
+      .map((r: Record<string, unknown>, i: number) => {
+        const box = r.box as Record<string, number>;
+        return {
+          id: i + 1,
+          name: r.label as string,
+          confidence: r.score as number,
+          x: box.xmin,
+          y: box.ymin,
+          width: box.xmax - box.xmin,
+          height: box.ymax - box.ymin,
+          color: colors[i % colors.length],
+        };
+      }) : [];
 
     return new Response(JSON.stringify({ detections }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
-  } catch (error) {
-    console.error('Error:', error);
-    return new Response(JSON.stringify({ error: error.message }), {
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error('Error:', msg);
+    return new Response(JSON.stringify({ error: msg }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
